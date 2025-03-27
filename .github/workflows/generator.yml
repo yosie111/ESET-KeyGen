@@ -1,0 +1,112 @@
+name: Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: 'Number of Accounts to be generated (default = 0)'
+        required: false
+        default: '0'
+      key:
+        description: 'Number of Keys to be generated (default = 1)'
+        required: false
+        default: '1'
+      mail:
+        description: 'Choose the mail provider to generate license'
+        required: true
+        type: choice
+        options:
+          - 1secmail
+          - guerrillamail
+          - developermail
+          - mailticking
+          - fakemail
+          - inboxes
+          - incognitomail
+        default: fakemail
+      key_type:
+        description: 'Modes of operation'
+        required: true
+        type: choice
+        options:
+          - --key
+          - --small-business-key
+          - --vpn-codes
+        default: --key
+      os:
+        description: 'Operating System of runner'
+        required: true
+        type: choice
+        options:
+          - macOS
+          - Linux
+          - Windows
+        default: macOS
+      branch:
+        description: "Repository branch"
+        required: false
+        type: choice
+        options:
+          - main
+          - test
+        default: main
+
+jobs:
+  generate:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    if: |
+      (matrix.os == 'ubuntu-latest' && github.event.inputs.os == 'Linux') ||
+      (matrix.os == 'macos-latest' && github.event.inputs.os == 'macOS') ||
+      (matrix.os == 'windows-latest' && github.event.inputs.os == 'Windows')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set variables
+        id: vars
+        run: |
+          echo "ACCOUNT=${{ github.event.inputs.account }}" >> $GITHUB_ENV
+          echo "KEY=${{ github.event.inputs.key }}" >> $GITHUB_ENV
+          echo "MAIL=${{ github.event.inputs.mail }}" >> $GITHUB_ENV
+          echo "KEY_TYPE=${{ github.event.inputs.key_type }}" >> $GITHUB_ENV
+          echo "BRANCH=${{ github.event.inputs.branch }}" >> $GITHUB_ENV
+
+      - name: Clone generator repo
+        run: git clone -b ${{ env.BRANCH }} https://github.com/rzc0d3r/ESET-KeyGen.git
+
+      - name: Set up environment
+        run: |
+          cd ESET-KeyGen
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+        shell: bash
+
+      - name: Generate keys
+        run: |
+          cd ESET-KeyGen
+          source venv/bin/activate
+
+          ACCOUNT=${ACCOUNT:-0}
+          KEY=${KEY:-1}
+
+          if [[ "$ACCOUNT" -ne 0 && "$KEY" -ne 0 ]]; then
+            python3 main.py --auto-detect-browser --account --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
+            python3 main.py --auto-detect-browser $KEY_TYPE --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
+          elif [[ "$ACCOUNT" -ne 0 ]]; then
+            python3 main.py --auto-detect-browser --account --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
+          elif [[ "$KEY" -ne 0 ]]; then
+            python3 main.py --auto-detect-browser $KEY_TYPE --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
+          fi
+        shell: bash
+
+      - name: Print summary
+        run: |
+          echo "Account:" >> $GITHUB_STEP_SUMMARY
+          cat ESET-KeyGen/*ACCOUNTS.txt 2>/dev/null || echo "No accounts" >> $GITHUB_STEP_SUMMARY
+          echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
+          cat ESET-KeyGen/*KEYS.txt 2>/dev/null || echo "No keys" >> $GITHUB_STEP_SUMMARY
+        shell: bash
